@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import IconCaretUp from "@/assets/icons/ic-caret-up.svg"
 import IconCaretDown from "@/assets/icons/ic-caret-down.svg"
 import IconCalendar from "@/assets/icons/ic-calendar.svg"
@@ -9,11 +9,14 @@ import IconChevronRight from "@/assets/icons/ic-chevron-right.svg"
 import IconChevronLeft from "@/assets/icons/ic-chevron-left.svg"
 import { daysInMonth } from "@/utils/daysInMont"
 import { monthName, weekdayByMonday } from "@/utils/dateName";
+import getYears from "@/utils/getYears";
+import { getHolidays } from "@/utils/getHolidays";
 
 type OpenCalender = {
     calendar: boolean,
     years: boolean,
-    mont: boolean
+    month: boolean
+    is_valid: boolean
 }
 
 type ArrayCalender = {
@@ -30,47 +33,101 @@ type OptionValue = {
     value: number
 }
 
+type ArrayHoliday = {
+    holiday_date: string,
+    holiday_name: string,
+    is_national_holiday: boolean
+}
+
 export default function DatePicker() {
-    const [isOpen, setIsOpen] = useState<OpenCalender>({ calendar: false, years: false, mont: false });
+    const [isOpen, setIsOpen] = useState<OpenCalender>({ calendar: false, years: false, month: false, is_valid: false });
     const [calendar, setCalendar] = useState<ArrayCalender[]>([]);
+    const [holidayList, setHolidayList] = useState<ArrayHoliday[]>([]);
+    const [yearsList, setYearsList] = useState<number[]>([]);
+    const [date, setDate] = useState<string>('');
     const [month, setMonth] = useState<OptionValue>({ label: monthName[new Date().getMonth()], value: new Date().getMonth() });
     const [year, setYear] = useState<OptionValue>({ label: new Date().getFullYear().toString(), value: new Date().getFullYear() });
 
+    const dataFetchedRef = useRef(false);
+
     useEffect(() => {
-        setCalendar(daysInMonth(month.value, year.value))
-    }, []);
+        if (dataFetchedRef.current) return;
+        dataFetchedRef.current = true;
+        getHolidayList()
+    });
+
+    const getHolidayList = async () => {
+        let calendarInMonth = daysInMonth(month.value, year.value)
+        let holidayInYear = await getHolidays(year.value)
+
+        const calendarWithHoliday = calendarInMonth.map((day) => {
+            const holiday = holidayInYear.filter((holi) => (holi.holiday_date === day.full_date))[0]
+            return { ...day, ...holiday }
+        })
+        setHolidayList(holidayInYear)
+        setCalendar(calendarWithHoliday);
+    }
 
     const handleOpenCalendar = () => {
         setIsOpen({ ...isOpen, calendar: !isOpen.calendar })
     }
 
     const handleShowYears = () => {
-        setIsOpen({ ...isOpen, years: !isOpen.years })
+        let show = isOpen.years
+        let yearsList = getYears()
+        setIsOpen({ ...isOpen, years: !show })
+        setYearsList(yearsList)
     }
 
-    const hanldeNextMonth = () => {
+    const hanldeNextMonth = async () => {
         let nextMonth = month.value + 1
-        
-        if (nextMonth === 12) nextMonth = 0
-        setCalendar(daysInMonth(nextMonth, year.value))
-        setMonth({ ...month, label: monthName[nextMonth], value: nextMonth })
+        let calendarInMonth = daysInMonth(nextMonth, year.value)
 
+        if (nextMonth === 12) nextMonth = 0
+        const calendarWithHoliday = calendarInMonth.map((day) => {
+            const holiday = holidayList.filter((holi) => (holi.holiday_date === day.full_date))[0]
+            return { ...day, ...holiday }
+        })
+        setCalendar(calendarWithHoliday);
+        setMonth({ ...month, label: monthName[nextMonth], value: nextMonth })
     }
 
-    const hanldePrevMonth = () => {
+    const hanldePrevMonth = async () => {
         let prevMont = month.value - 1
+        let calendarInMonth = daysInMonth(prevMont, year.value)
 
         if (prevMont < 1) prevMont = 11
-        setCalendar(daysInMonth(prevMont, year.value))
+        const calendarWithHoliday = calendarInMonth.map((day) => {
+            const holiday = holidayList.filter((holi) => (holi.holiday_date === day.full_date))[0]
+            return { ...day, ...holiday }
+        })
+        setCalendar(calendarWithHoliday);
         setMonth({ ...month, label: monthName[prevMont], value: prevMont })
+    }
 
+    const handleChange = (e: any) => {
+        let value = e.target.value
+        setDate(value)
+    }
+
+    const hanldePickDate = (e: any) => {
+        let newDate = e.date + "/" + e.month + "/" + e.year
+        setDate(newDate)
+        setIsOpen({ ...isOpen, calendar: false })
+    }
+
+    const isWeekEnd = (days: string) => {
+        let valid = false
+        let day = days.split('')[0]
+        if (day === 'S') valid = true
+        return valid
     }
 
     return (
         <div className="flex flex-col">
             <label className="capitalize">date picker</label>
             <div className="relative mt-2 rounded-md shadow-sm w-96">
-                <input type="text" name="date" id="date" placeholder="dd/mm/yy" className="uppercase block w-full h-12 rounded-md border-0 py-1.5 pl-1.5 pr-20 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6" />
+                <input value={date} onChange={handleChange} type="text" name="date" id="date" placeholder="dd/mm/yy" className="uppercase block w-full h-12 rounded-md border-0 py-1.5 pl-1.5 pr-20 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6" />
                 <div className="absolute inset-y-0 right-0 flex items-center">
                     <button onClick={handleOpenCalendar} className="p-2">
                         <Image src={IconCalendar} alt="Icon Calendar" />
@@ -86,30 +143,48 @@ export default function DatePicker() {
                                     <Image src={isOpen.years ? IconCaretDown : IconCaretUp} alt="Picture of the author" />
                                 </button>
                             </div>
-                            <div className="flex gap-10">
-                                <button onClick={hanldePrevMonth} className="p-2">
-                                    <Image src={IconChevronLeft} alt="Picture of the author" />
-                                </button>
-                                <button onClick={hanldeNextMonth} className="p-2">
-                                    <Image src={IconChevronRight} alt="Picture of the author" />
-                                </button>
-                            </div>
+                            {isOpen.years ? null :
+                                <div className="flex gap-10">
+                                    <button onClick={hanldePrevMonth} className="p-2">
+                                        <Image src={IconChevronLeft} alt="Picture of the author" />
+                                    </button>
+                                    <button onClick={hanldeNextMonth} className="p-2">
+                                        <Image src={IconChevronRight} alt="Picture of the author" />
+                                    </button>
+                                </div>
+                            }
                         </div>
-                        <div className="mt-5">
-                            <div className="grid grid-cols-7 grid-flow-row gap-4 mt-5">
-                                {weekdayByMonday.map((day: any) => {
-                                    return (
-                                        <label key={day} className="w-8 text-center font-semibold">{day.split('')[0]}</label>
-                                    )
-                                })}
-                            </div>
-                            <div className="grid grid-cols-7 grid-flow-row gap-y-2 gap-x-4 mt-5">
-                                {calendar.map((list: any, idx: any) => {
-                                    return (
-                                        <label key={idx} className="w-10 h-5 text-center hover:bg-gray-500 radius rounded hover:text-white">{list.is_month ? list.date : ''}</label>
-                                    )
-                                })}
-                            </div>
+                        <div className="mt-5" >
+                            {isOpen.years ?
+                                <div className="grid grid-cols-7 grid-flow-row gap-4 mt-5">
+                                    {yearsList.length > 0 ?
+                                        yearsList.map((list, idx) => {
+                                            return (
+                                                <label key={idx} className={`w-8 text-center font-semibold`}>{list}</label>
+                                            )
+                                        })
+                                        :
+                                        null
+                                    }
+                                </div>
+                                :
+                                <div>
+                                    <div className="grid grid-cols-7 grid-flow-row gap-y-2 gap-x-4 mt-5">
+                                        {weekdayByMonday.map((day: any) => {
+                                            return (
+                                                <label key={day} className={`w-8 text-center font-semibold ${isWeekEnd(day) && 'text-red-500'}`}>{day.split('')[0]}</label>
+                                            )
+                                        })}
+                                    </div>
+                                    <div className="grid grid-cols-7 grid-flow-row gap-y-2 gap-x-4 mt-5">
+                                        {calendar.map((list: any, idx: any) => {
+                                            return (
+                                                <label onClick={() => hanldePickDate(list)} key={idx} className={`w-8 h-5 text-center ${list.is_month && 'hover:bg-gray-500 radius rounded hover:text-white'} ${isWeekEnd(list.day) && 'text-red-500'} ${list.is_national_holiday && 'text-red-500'}`}>{list.is_month ? list.date : ''}</label>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+                            }
                         </div>
                     </div>
                 }

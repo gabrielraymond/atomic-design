@@ -17,6 +17,7 @@ export const daysInMonth = (month: number, year: number) => {
         let isMonth = month + 1 === date.getMonth()
 
         let newDate = {
+            full_date: days,
             is_month: isMonth,
             date: date.getDate(),
             month: date.getMonth() + 1,
